@@ -1,7 +1,17 @@
 const bcrypt = require("bcrypt");
+const joi = require("joi");
 
 const userModel = require("../models/user.model");
 const generateToken = require("../utils/create.token");
+
+const userSchema = joi.object({
+  username: joi.string().min(4).max(20).required().alphanum(),
+  email: joi
+    .string()
+    .required()
+    .email({ minDomainSegments: 2, tlds: { allow: ["com", "net"] } }),
+  password: joi.string().min(8).required()
+});
 
 const createUser = async (req, res) => {
   // res.set('Content-Type', 'application/json')
@@ -139,27 +149,26 @@ const deleteUser = async (req, res) => {
 
   if (User) {
     if (User.isAdmin) {
-     return res
+      return res
         .status(400)
         .json({ message: "OOPS .. Couldnot Delelte Admin...", error: true });
     }
     await userModel.findByIdAndDelete({ _id: User._id });
     return res.status(200).json({ message: "User Deleted..." });
-  }
-  else{
-    return res.status(400).json({message:"COuldnot FInd the user",error:true})
+  } else {
+    return res
+      .status(400)
+      .json({ message: "COuldnot FInd the user", error: true });
   }
 };
-const getUserById=async(req,res)=>{
-  const id=req.params.id
-  const User=await userModel.findById(id).select('-password');
+const getUserById = async (req, res) => {
+  const id = req.params.id;
+  const User = await userModel.findById(id).select("-password");
   // console.log(User);
-  if(User){
-    return res.status(200).json({message:User});
-
-  }
-  else{
-    return res.status(400).json({message:'Couldnot Find User...'});
+  if (User) {
+    return res.status(200).json({ message: User });
+  } else {
+    return res.status(400).json({ message: "Couldnot Find User..." });
   }
 };
 
@@ -171,5 +180,5 @@ module.exports = {
   getCurrentUserProfile,
   updateCurrentProfile,
   deleteUser,
-  getUserById
+  getUserById,
 };
