@@ -1,8 +1,8 @@
-const token=require('jsonwebtoken');
+const jwt=require('jsonwebtoken');
 
 const generateToken=(res,userId)=>{
 
-  const jwtToken=token.sign({userId},process.env.SECRET,{expiresIn:'5d'});
+  const jwtToken=jwt.sign({userId},process.env.SECRET,{expiresIn:'5d'});
   res.cookie('token',jwtToken,{
     // js bata access hudaina docs .cookie yesari access hudaina..
     httpOnly:true,

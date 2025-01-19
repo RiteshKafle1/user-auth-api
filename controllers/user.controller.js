@@ -4,13 +4,24 @@ const joi = require("joi");
 const userModel = require("../models/user.model");
 const generateToken = require("../utils/create.token");
 
-const userSchema = joi.object({
-  username: joi.string().min(4).max(20).required().alphanum(),
-  email: joi
+const userCreatingSchema = joi.object({
+  username: joi.string().min(5).max(20).required(),
+  email: joi.string().required().email({ minDomainSegments: 2 }),
+  password: joi
     .string()
+    .min(8)
     .required()
-    .email({ minDomainSegments: 2, tlds: { allow: ["com", "net"] } }),
-  password: joi.string().min(8).required()
+    .pattern(new RegExp("(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])"))
+    .max(20),
+});
+const userLogInSchema = joi.object({
+  email: joi.string().required().email({ minDomainSegments: 2 }),
+  password: joi
+    .string()
+    .min(8)
+    .required()
+    .pattern(new RegExp("(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])"))
+    .max(20),
 });
 
 const createUser = async (req, res) => {
@@ -21,25 +32,42 @@ const createUser = async (req, res) => {
   // res.status(201).json({message:'hello from controllers...'})
 
   const { username, email, password } = req.body;
+
+  const { error } = userCreatingSchema.validate(req.body);
+
+  if (error) {
+    return res
+      .status(401)
+      .json({ error: true, message: error.details[0].message });
+  }
   // console.log(username)
   // console.log(email)
   // console.log(password);
   // console.log(req.body);
 
   // res.status(201).json({message:'you get that'})
-  if (!username || !email || !password) {
-    return res
-      .status(400)
-      .json({ error: true, message: "Fields cannot be Empty" });
-  }
+  // if (!username || !email || !password) {
+  //   return res
+  //     .status(400)
+  //     .json({ error: true, message: "Fields cannot be Empty" });
+  // }
+
   // findOne gives only one document
-  const userExisted = await userModel.findOne({ email: email });
+  const userExisted = await userModel.findOne({ email });
+  const userNameExisted = await userModel.findOne({ username });
+
+  if (userNameExisted) {
+    return res
+      .status(403)
+      .json({ error: true, message: "UserName Already Exists" });
+  }
   // console.log(userExisted);
   if (userExisted) {
     return res
-      .status(400)
-      .json({ error: true, message: "Account Already Created..." });
+      .status(403)
+      .json({ error: true, message: "Account Already Exists" });
   }
+
   const salt = await bcrypt.genSalt(10);
 
   const hashedPass = await bcrypt.hash(password, salt);
@@ -53,7 +81,7 @@ const createUser = async (req, res) => {
   try {
     await newUser.save();
     generateToken(res, newUser._id);
-    return res.status(200).json({
+    return res.status(201).json({
       error: false,
       _id: newUser._id,
       username: newUser.username,
@@ -62,58 +90,85 @@ const createUser = async (req, res) => {
       isAdmin: newUser.isAdmin,
     });
   } catch (e) {
-    return res.status(400).json({ error: true, message: e.message });
+    console.log("Error in create user.", e);
+    return res.status(401).json({ error: true, message: e.message });
   }
 };
+
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
-  if (!email || !password) {
-    return res
-      .status(400)
-      .json({ error: true, message: "Fields cannot be Empty" });
-  }
-  const userExisted = await userModel.findOne({ email: email });
 
-  if (!userExisted) {
+  const { error } = userLogInSchema.validate(req.body);
+
+  if (error) {
+    //console.log(error);
     return res
-      .status(400)
-      .json({ error: true, message: " OOPS !:) Couldnot found a User..." });
+      .status(401)
+      .json({ error: true, message: error.details[0].message });
   }
 
-  if (userExisted) {
-    const isPasswordValid = await bcrypt.compare(
-      password,
-      userExisted.password
-    );
-    if (!isPasswordValid) {
+  // if (!email || !password) {
+  //   return res
+  //     .status(400)
+  //     .json({ error: true, message: "Fields cannot be Empty" });
+  try {
+    const userExisted = await userModel.findOne({ email: email });
+
+    if (!userExisted) {
       return res
-        .status(400)
-        .json({ error: true, message: "Password Incorrect..." });
+        .status(404)
+        .json({ error: true, message: " OOPS !.. Couldnot found a User" });
     }
-    generateToken(res, userExisted._id);
-    return res.status(200).json({
-      message: "LogIn Sucess...",
-      _id: userExisted._id,
-      username: userExisted.username,
-      email: userExisted.email,
-      password: userExisted.password,
-      isAdmin: userExisted.isAdmin,
-      error: false,
-    });
+
+    if (userExisted) {
+      const isPasswordValid = await bcrypt.compare(
+        password,
+        userExisted.password
+      );
+
+      if (!isPasswordValid) {
+        return res
+          .status(401)
+          .json({ error: true, message: "Password Incorrect..." });
+      }
+      if (userExisted && isPasswordValid) {
+        generateToken(res, userExisted._id);
+        return res.status(200).json({
+          message: "LogIn Success.",
+          _id: userExisted._id,
+          username: userExisted.username,
+          email: userExisted.email,
+          password: userExisted.password,
+          isAdmin: userExisted.isAdmin,
+          error: false,
+        });
+      }
+    }
+  } catch (e) { 
+    console.log('Error in login',e)
+    return res.status(401).json({error:true,message:'Couldnot Logged IN.'})
   }
 };
+
 const logoutUser = async (req, res) => {
   // while clearing the cookie the attributes used when seting it should be cleared as well:)
+ 
   res.clearCookie("token", { httpOnly: true });
-  res.status(200).json({
+  return res.status(200).json({
     error: false,
     message: "Logged Out Successfully...",
   });
 };
+
 const getAllUser = async (req, res) => {
-  console.log("I am inside the Admin Dashboard...");
-  const allUser = await userModel.find({});
-  return res.status(200).json({ error: false, message: allUser });
+  
+  try {
+    const allUser = await userModel.find({});
+    return res.status(200).json({ error: false, message: allUser });
+  } catch (e) {
+    console.log('Error in GetAllUser');
+    return res.status(404).json({error:true,message:'Couldnot Find your request.'})
+  }
 };
 const getCurrentUserProfile = async (req, res) => {
   const user = await userModel
