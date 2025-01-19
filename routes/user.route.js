@@ -10,6 +10,7 @@ const {
   updateCurrentProfile,
   deleteUser,
   getUserById,
+  updateUserById
 } = require("../controllers/user.controller");
 
 const { authenticate, authorizeAdmin } = require("../middlewares/auth");
@@ -21,7 +22,7 @@ router
   .get(authenticate, authorizeAdmin, getAllUser);
 
 // login and logout user
-router.route("/auth").post(loginUser);
+router.route("/login").post(loginUser);
 router.post("/logout", logoutUser);
 
 // get and update user profile
@@ -31,10 +32,11 @@ router
   .put(authenticate, updateCurrentProfile);
   
 // admin
-// get user and delete user
+// get user,delete user,update user.
 router
   .route("/:id")
   .delete(authenticate, authorizeAdmin, deleteUser)
-  .get(authenticate, authorizeAdmin, getUserById);
+  .get(authenticate, authorizeAdmin, getUserById)
+  .put(authenticate, authorizeAdmin, updateUserById);
 
 module.exports = router;
