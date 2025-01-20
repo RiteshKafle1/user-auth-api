@@ -38,25 +38,28 @@ const updateCategory = async (req, res) => {
     return res.status(404).json({ error: true, message: "Invalid Category" });
   }
   const { categoryId } = req.params;
-  const {name}=req.body;
+  const { name } = req.body;
 
   try {
     const categoryInDb = await Category.findById(categoryId);
 
-    if(!categoryInDb){
-      return res.status(404).json({error:true,message:'couldnt found your category.'})
+    if (!categoryInDb) {
+      return res
+        .status(404)
+        .json({ error: true, message: "couldnt found your category." });
     }
 
-    if(categoryInDb.updatedAt.getDate()=== new Date().getDate()){
-      return res.status(404).json({error:true,message:'Looks like you changed the name recently,so wait for 24 hr.'})
+    if (categoryInDb.updatedAt.getDate() === new Date().getDate()) {
+      return res.status(404).json({
+        error: true,
+        message: "Looks like you changed the name recently,so wait for 24 hr.",
+      });
     }
     const trimmedName = name.replace(/\s+/g, "");
 
-
-    categoryInDb.name=trimmedName || categoryInDb.name;
+    categoryInDb.name = trimmedName || categoryInDb.name;
     await categoryInDb.save();
-  return res.status(200).json({error:false,message:categoryInDb})
-
+    return res.status(200).json({ error: false, message: categoryInDb });
   } catch (error) {
     console.log("Error in Updatecategory", error);
     return res
@@ -64,5 +67,28 @@ const updateCategory = async (req, res) => {
       .json({ error: true, message: "Couldnot Update Category" });
   }
 };
+const deleteCategory = async (req, res) => {
+  const { categoryId } = req.params;
 
-module.exports = { createCategory, updateCategory };
+  try {
+    const categoryInDb = await Category.findByIdAndDelete(categoryId);
+    //console.log(categoryInDb)
+
+    if (!categoryInDb) {
+      return res
+        .status(404)
+        .json({ error: true, message: "Couldnt Found your Category." });
+    }
+
+     const allCategory = await Category.find({});
+
+     return res.status(200).json({ error: false, message: 'Category Deleted',allCategory });
+  } catch (error) {
+    console.log("Error in Deletecategory", error);
+    return res
+      .status(404)
+      .json({ error: true, message: "Couldnot Delete Category" });
+  }
+};
+
+module.exports = { createCategory, updateCategory, deleteCategory };
