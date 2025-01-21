@@ -58,6 +58,7 @@ const createUser = async (req, res) => {
 
   // findOne gives only one document
   const userExisted = await userModel.findOne({ email });
+  
   const userNameExisted = await userModel.findOne({ username });
 
   if (userNameExisted) {
