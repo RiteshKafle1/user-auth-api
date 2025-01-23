@@ -1,8 +1,12 @@
 const bcrypt = require("bcrypt");
 const joi = require("joi");
+const crypto = require("crypto");
 
 const userModel = require("../models/user.model");
 const generateToken = require("../utils/create.token");
+const sendMail = require("../utils/mail.resend");
+const welcomeMail = require("../utils/welcome.mail");
+const passResetMail = require("../utils/password.reset");
 const generateVerificationToken = require("../utils/verification.token");
 // res.set('Content-Type', 'application/json')
 // res.status(201).json({message:'hello from controllers...'})
@@ -16,15 +20,18 @@ const userCreatingSchema = joi.object({
     .max(20)
     .required()
     .alphanum()
-    .pattern(/^[a-zA-Z0-9_]+$/) // ^ -> start of string,[..]-> find any betn bracket
+    .pattern(new RegExp("(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])"))
+    // ^ -> start of string,
+    // [..]-> find any betn bracket
     .messages({
+      // this are all the type of error
       "string.base": "Username must be a string.",
       "string.empty": "Username is required.",
       "string.min": "Username must be at least 5 characters long.",
       "string.max": "Username cannot exceed 20 characters.",
       "string.alphanum": "Username must contain only letters and numbers.",
       "string.pattern.base":
-        "Username can only contain letters, numbers, and underscores.",
+        "Username must contain at least one lowercase letter, one uppercase letter, and one number.",
     }),
   email: joi.string().required().email({ minDomainSegments: 2 }).messages({
     "string.email": "Please provide a valid email address.",
@@ -35,7 +42,9 @@ const userCreatingSchema = joi.object({
     .string()
     .min(8)
     .required()
-    .pattern(new RegExp("(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^?&])"))
+    .pattern(
+      new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^?&])\\S*$")
+    )
     .max(20)
     .messages({
       "string.base": "Password must be a string.",
@@ -43,7 +52,7 @@ const userCreatingSchema = joi.object({
       "string.min": "Password must be at least 8 characters long.",
       "string.max": "Password cannot exceed 30 characters.",
       "string.pattern.base":
-        "Password must include at least one uppercase letter, one lowercase letter, one number, and one special character.",
+        "Password must include at least one uppercase letter, one lowercase letter, one number, and one special character no space.",
     }),
 });
 
@@ -86,10 +95,34 @@ const userUpdateSchema = joi.object({
         "Username can only contain letters, numbers, and underscores.",
     }),
 });
+const emailScheamforPassword = joi.object({
+  email: joi.string().required().email({ minDomainSegments: 2 }).messages({
+    "string.email": "Please provide a valid email address.",
+    "string.empty": "Email address is required.",
+    "any.required": "Email is a mandatory field.",
+  }),
+});
+const resetPasswordSchema = joi.object({
+  password: joi
+    .string()
+    .min(8)
+    .required()
+    .pattern(new RegExp("(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^?&])"))
+    .max(20)
+    .messages({
+      "string.base": "Password must be a string.",
+      "string.empty": "Password is required.",
+      "string.min": "Password must be at least 8 characters long.",
+      "string.max": "Password cannot exceed 30 characters.",
+      "string.pattern.base":
+        "Password must include at least one uppercase letter, one lowercase letter, one number, and one special character.",
+    }),
+});
 
 const createUser = async (req, res) => {
   const { username, email, password } = req.body;
 
+  // validation using joi
   const { error } = userCreatingSchema.validate(req.body);
 
   if (error) {
@@ -113,8 +146,8 @@ const createUser = async (req, res) => {
     }
 
     const salt = await bcrypt.genSalt(10);
-
     const hashedPass = await bcrypt.hash(password, salt);
+
     const verificationToken = generateVerificationToken();
 
     const newUser = new userModel({
@@ -126,6 +159,8 @@ const createUser = async (req, res) => {
     });
 
     await newUser.save();
+    sendMail(verificationToken, newUser.email);
+
     generateToken(res, newUser._id);
     return res.status(201).json({
       error: false,
@@ -158,7 +193,7 @@ const loginUser = async (req, res) => {
     if (!userExisted) {
       return res
         .status(404)
-        .json({ error: true, message: " OOPS !.. Couldnot found a User" });
+        .json({ error: true, message: " OOPS !.. Invalid credentials" });
     }
 
     if (userExisted) {
@@ -169,7 +204,7 @@ const loginUser = async (req, res) => {
       if (!isPasswordValid) {
         return res
           .status(401)
-          .json({ error: true, message: "Password Incorrect." });
+          .json({ error: true, message: "Invalid credentials" });
       }
 
       generateToken(res, userExisted._id);
@@ -187,7 +222,7 @@ const loginUser = async (req, res) => {
     console.log("Error in login", e);
     return res
       .status(401)
-      .json({ error: true, message: "Couldnot Logged IN." });
+      .json({ error: true, message: "Invalid credentials" });
   }
 };
 
@@ -203,7 +238,7 @@ const logoutUser = async (req, res) => {
 
 const getAllUser = async (req, res) => {
   try {
-    const allUser = await userModel.find({});
+    const allUser = await userModel.find({}).sort({ name: 1 });
     return res.status(200).json({ error: false, message: allUser });
   } catch (e) {
     console.log("Error in getalluser", e);
@@ -233,9 +268,7 @@ const getCurrentUserProfile = async (req, res) => {
 const updateCurrentProfile = async (req, res) => {
   const { error } = userUpdateSchema.validate(req.body);
   if (error) {
-    return res
-      .status(401)
-      .json({ error: true, message: error.details[0].message });
+    return res.status(401).json({ error: true, message: error.message });
   }
   const { username } = req.body;
   try {
@@ -337,6 +370,101 @@ const updateUserById = async (req, res) => {
     return res.status(404).json({ error: true, message: "Updation Failed." });
   }
 };
+const verifyUseremail = async (req, res) => {
+  const { userverifycode } = req.body;
+
+  try {
+    // console.log(req.user.verificationTokenExpiresAt);
+    // let date=new Date()
+    // console.log(date);
+    // console.log(req.user.verificationTokenExpiresAt > date);
+    //console.log(req.user.id);
+    const user = await userModel.findById(req.user._id);
+
+    if (
+      user.verificationToken === userverifycode &&
+      user.verificationTokenExpiresAt > new Date()
+    ) {
+      user.isVerified = true;
+      user.verificationToken = null;
+      user.verificationTokenExpiresAt = null;
+      await user.save();
+      welcomeMail(user.email);
+
+      return res.status(200).json({ error: false, message: "User Verified." });
+    } else {
+      return res.status(400).json({ error: true, message: "Couldnt verify." });
+    }
+  } catch (error) {
+    console.log("Error in verifyUseremail", error);
+    return res
+      .status(500)
+      .json({ error: true, message: "Couldnot verify email" });
+  }
+};
+const forgotpass = async (req, res) => {
+  const { error } = emailScheamforPassword.validate(req.body);
+  if (error) {
+    return res.status(401).json({ error: true, message: error.message });
+  }
+  try {
+    const { email } = req.body;
+
+    const user = await userModel.findOne(email);
+    if (!user) {
+      return res
+        .status(400)
+        .json({ error: true, message: "Couldnot Found user" });
+    }
+    const resetToken = crypto.randomBytes(20).toString("hex");
+    //console.log(resetToken);
+    const tokenexpiry = Date.now() + 1 * 60 * 60 * 1000;
+
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpiresAt = tokenexpiry;
+
+    await user.save();
+    passResetMail(
+      user.email,
+      `${process.env.CLIENT_URL}/reset-passwod/${resetPasswordToken}`
+    );
+  } catch (error) {
+    console.log("Error in forgot pass", error);
+    return res.status({ error: false, message: "Could not recover password." });
+  }
+};
+const resetpass = async (req, res) => {
+  const { error } = resetPasswordSchema.validate(req.body);
+  if (error)
+    return res.status(401).json({ error: true, message: error.message });
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    const user = await userModel.findOne({
+      resetPasswordToken: token,
+    });
+    if (user.resetPasswordExpiresAt > Date.now()) {
+      const salt = await bcrypt.genSalt(10);
+      const hashedPass = await bcrypt.hash(password, salt);
+
+      user.password = hashedPass;
+      user.resetPasswordToken = null;
+      user.resetPasswordExpiresAt = null;
+      await user.save();
+      return res
+        .status(200)
+        .json({ error: false, message: "Password Reset Success." });
+    } else {
+      return res.status(400).json({ error: true, message: "Invalid token" });
+    }
+  } catch (error) {
+    console.log("Error in RestPassword", error);
+    return res
+      .status(400)
+      .json({ error: true, message: "Couldnot reset Password" });
+  }
+};
 
 module.exports = {
   createUser,
@@ -348,4 +476,7 @@ module.exports = {
   deleteUser,
   getUserById,
   updateUserById,
+  verifyUseremail,
+  forgotpass,
+  resetpass,
 };
