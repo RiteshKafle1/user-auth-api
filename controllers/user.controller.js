@@ -62,7 +62,9 @@ const userLogInSchema = joi.object({
     .string()
     .min(8)
     .required()
-    .pattern(new RegExp("(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^?&])"))
+    .pattern(
+      new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^?&])\\S*$")
+    )
     .max(20)
     .messages({
       "string.base": "Password must be a string.",
@@ -70,7 +72,7 @@ const userLogInSchema = joi.object({
       "string.min": "Password must be at least 8 characters long.",
       "string.max": "Password cannot exceed 30 characters.",
       "string.pattern.base":
-        "Password must include at least one uppercase letter, one lowercase letter, one number, and one special character.",
+        "Password must include at least one uppercase letter, one lowercase letter, one number, and one special character no space.",
     }),
 });
 const userUpdateSchema = joi.object({
@@ -80,15 +82,18 @@ const userUpdateSchema = joi.object({
     .max(20)
     .required()
     .alphanum()
-    .pattern(/^[a-zA-Z0-9_]+$/) // ^ -> start of string,[..]-> find any betn bracket
+    .pattern(new RegExp("(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])"))
+    // ^ -> start of string,
+    // [..]-> find any betn bracket
     .messages({
+      // this are all the type of error
       "string.base": "Username must be a string.",
       "string.empty": "Username is required.",
       "string.min": "Username must be at least 5 characters long.",
       "string.max": "Username cannot exceed 20 characters.",
       "string.alphanum": "Username must contain only letters and numbers.",
       "string.pattern.base":
-        "Username can only contain letters, numbers, and underscores.",
+        "Username must contain at least one lowercase letter, one uppercase letter, and one number.",
     }),
 });
 const emailScheamforPassword = joi.object({
@@ -103,7 +108,9 @@ const resetPasswordSchema = joi.object({
     .string()
     .min(8)
     .required()
-    .pattern(new RegExp("(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^?&])"))
+    .pattern(
+      new RegExp("^(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[!@#$%^?&])\\S*$")
+    )
     .max(20)
     .messages({
       "string.base": "Password must be a string.",
@@ -111,7 +118,7 @@ const resetPasswordSchema = joi.object({
       "string.min": "Password must be at least 8 characters long.",
       "string.max": "Password cannot exceed 30 characters.",
       "string.pattern.base":
-        "Password must include at least one uppercase letter, one lowercase letter, one number, and one special character.",
+        "Password must include at least one uppercase letter, one lowercase letter, one number, and one special character no space.",
     }),
 });
 
@@ -339,9 +346,7 @@ const getUserById = async (req, res) => {
 const updateUserById = async (req, res) => {
   const { error } = userUpdateSchema.validate(req.body);
   if (error) {
-    return res
-      .status(401)
-      .json({ error: true, message: error.message });
+    return res.status(401).json({ error: true, message: error.message });
   }
   const { username } = req.body;
   const id = req.params.id;
@@ -370,7 +375,6 @@ const verifyUseremail = async (req, res) => {
   const { userverifycode } = req.body;
 
   try {
-
     const user = await userModel.findById(req.user._id);
 
     if (
