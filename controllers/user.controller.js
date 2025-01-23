@@ -8,11 +8,7 @@ const sendMail = require("../utils/mail.resend");
 const welcomeMail = require("../utils/welcome.mail");
 const passResetMail = require("../utils/password.reset");
 const generateVerificationToken = require("../utils/verification.token");
-// res.set('Content-Type', 'application/json')
-// res.status(201).json({message:'hello from controllers...'})
-// .send garda res as a plane text nai janxa but .json garda json format ma res janxa..ani content type pani json hunxa
-// res.status(201).send('hello from controllers...')
-// res.status(201).json({message:'hello from controllers...'})
+
 const userCreatingSchema = joi.object({
   username: joi
     .string()
@@ -345,7 +341,7 @@ const updateUserById = async (req, res) => {
   if (error) {
     return res
       .status(401)
-      .json({ error: true, message: error.details[0].message });
+      .json({ error: true, message: error.message });
   }
   const { username } = req.body;
   const id = req.params.id;
@@ -374,11 +370,7 @@ const verifyUseremail = async (req, res) => {
   const { userverifycode } = req.body;
 
   try {
-    // console.log(req.user.verificationTokenExpiresAt);
-    // let date=new Date()
-    // console.log(date);
-    // console.log(req.user.verificationTokenExpiresAt > date);
-    //console.log(req.user.id);
+
     const user = await userModel.findById(req.user._id);
 
     if (
@@ -417,7 +409,7 @@ const forgotpass = async (req, res) => {
         .json({ error: true, message: "Couldnot Found user" });
     }
     const resetToken = crypto.randomBytes(20).toString("hex");
-    //console.log(resetToken);
+
     const tokenexpiry = Date.now() + 1 * 60 * 60 * 1000;
 
     user.resetPasswordToken = resetToken;
